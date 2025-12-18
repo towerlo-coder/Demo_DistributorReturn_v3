@@ -410,9 +410,11 @@ const ReturnRateOverTimeChart = ({ transactions, title }: ReturnRateChartProps) 
 
 interface TopProductsProps {
   transactions: Transaction[];
+  selectedProductCode: string | null;
+  onSelectProduct: (code: string) => void;
 }
 
-const TopProductsChart = ({ transactions }: TopProductsProps) => {
+const TopProductsChart = ({ transactions, selectedProductCode, onSelectProduct }: TopProductsProps) => {
   const topProducts = calculateTopReturnedProducts(transactions);
   
   if (topProducts.length === 0) return <div className="p-4 text-center text-gray-500">无产品数据</div>;
@@ -425,16 +427,25 @@ const TopProductsChart = ({ transactions }: TopProductsProps) => {
         <Package className="w-5 h-5 mr-2 text-indigo-500" /> 
         热门退货产品 (Top 5)
       </h2>
+      <p className="text-xs text-gray-500 mb-4">点击产品可查看具体趋势</p>
       <div className="space-y-4">
         {topProducts.map((p, i) => (
-          <div key={p.itemCode}>
+          <div 
+            key={p.itemCode}
+            onClick={() => onSelectProduct(p.itemCode)}
+            className={`cursor-pointer p-2 rounded-lg transition-colors ${
+              selectedProductCode === p.itemCode ? 'bg-indigo-50 border border-indigo-200' : 'hover:bg-gray-50'
+            }`}
+          >
             <div className="flex justify-between text-sm mb-1">
-              <span className="font-medium text-gray-700">{i + 1}. {p.productName} <span className="text-xs text-gray-400">({p.itemCode})</span></span>
+              <span className={`font-medium ${selectedProductCode === p.itemCode ? 'text-indigo-700' : 'text-gray-700'}`}>
+                {i + 1}. {p.productName} <span className="text-xs text-gray-400">({p.itemCode})</span>
+              </span>
               <span className="font-bold text-red-600">{p.returnQty} 件</span>
             </div>
             <div className="w-full bg-gray-100 rounded-full h-2.5">
               <div 
-                className="bg-indigo-500 h-2.5 rounded-full" 
+                className={`${selectedProductCode === p.itemCode ? 'bg-indigo-600' : 'bg-indigo-400'} h-2.5 rounded-full transition-all`}
                 style={{ width: `${(p.returnQty / maxQty) * 100}%` }}
               ></div>
             </div>
@@ -536,7 +547,41 @@ interface DashboardViewProps {
 }
 
 const DashboardView = ({ data, onSelectSupplier, selectedYear, onSelectYear }: DashboardViewProps) => {
+  const [selectedProductCode, setSelectedProductCode] = useState<string | null>(null);
+
   const filteredTransactions = useMemo(() => filterTransactionsByYear(data.transactions, selectedYear), [data.transactions, selectedYear]);
+
+  // Compute transactions for the trend chart.
+  // If a product is selected, filter by that product from ALL transactions (to show history),
+  // or you could filter from `filteredTransactions` if you only want to show the selected year's trend.
+  // Standard pattern: if I select a product from a "2024" list, I might want to see its performance in 2024.
+  // Let's stick to the selected year context for consistency with the filter.
+  // If the user wants to see all history, they select "All" in the year filter.
+  const chartTransactions = useMemo(() => {
+    if (!selectedProductCode) {
+      // Show data based on the year selector (all products)
+      // Note: The previous code passed `data.transactions` (all time) to the chart regardless of year selector.
+      // To preserve that behavior for the "Overall" view but allow filtering by product:
+      // If we want the chart to react to the Year filter too (which is better UX), we should use `filteredTransactions`.
+      // However, the prompt specifically asked for product filtering.
+      // Let's use `data.transactions` as base to keep the "Overall History" view,
+      // but filter by product if selected.
+      return data.transactions; 
+    }
+    return data.transactions.filter(t => t.itemCode === selectedProductCode);
+  }, [data.transactions, selectedProductCode]);
+
+  const chartTitle = selectedProductCode 
+    ? `${data.transactions.find(t => t.itemCode === selectedProductCode)?.productName || '产品'} 退货率趋势 (按数量)`
+    : "整体退货率趋势 (按产品数量)";
+
+  const handleProductSelect = (code: string) => {
+    if (selectedProductCode === code) {
+      setSelectedProductCode(null);
+    } else {
+      setSelectedProductCode(code);
+    }
+  };
 
   const totalPurchaseQty = filteredTransactions.filter(t => t.type === '采购').reduce((sum, t) => sum + t.quantity, 0);
   const totalReturnQty = filteredTransactions.filter(t => t.type === '退货').reduce((sum, t) => sum + t.quantity, 0);
@@ -566,12 +611,16 @@ const DashboardView = ({ data, onSelectSupplier, selectedYear, onSelectYear }: D
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
         <div className="lg:col-span-2">
           <ReturnRateOverTimeChart
-            transactions={data.transactions}
-            title="整体退货率趋势 (按产品数量)"
+            transactions={chartTransactions}
+            title={chartTitle}
           />
         </div>
         <div className="lg:col-span-1">
-          <TopProductsChart transactions={filteredTransactions} />
+          <TopProductsChart 
+            transactions={filteredTransactions} 
+            selectedProductCode={selectedProductCode}
+            onSelectProduct={handleProductSelect}
+          />
         </div>
       </div>
 
