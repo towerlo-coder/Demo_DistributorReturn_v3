@@ -76,19 +76,19 @@ interface ProductReturnData {
 const generateMockData = (): AppData => {
   // 修改为分销商名称
   const suppliers: Supplier[] = [
-    { id: 'D001', name: '华东区域分销中心', avgReturnRate: 0.015 }, 
-    { id: 'D002', name: '北方电子渠道商', avgReturnRate: 0.04 },
-    { id: 'D003', name: '速达连锁零售', avgReturnRate: 0.07 },
-    { id: 'D004', name: '数码港特许经营店', avgReturnRate: 0.095 },
+    { id: 'D001', name: '华东医药分销中心', avgReturnRate: 0.015 }, 
+    { id: 'D002', name: '北方康健医药渠道', avgReturnRate: 0.04 },
+    { id: 'D003', name: '民生连锁大药房', avgReturnRate: 0.07 },
+    { id: 'D004', name: '康宁特许经营药店', avgReturnRate: 0.095 },
   ];
 
   const productCatalog: Record<string, string> = {
-    'ITEM-A1': '高速 HDMI 线缆',
-    'ITEM-B2': '无线蓝牙耳机',
-    'ITEM-C3': 'USB-C 充电适配器',
-    'ITEM-D4': '智能手表表带',
-    'ITEM-E5': '机械键盘轴体',
-    'ITEM-F6': '高清网络摄像头'
+    'MED-001': '布洛芬缓释胶囊 (0.3g*24粒)',
+    'MED-002': '阿莫西林胶囊 (0.25g*24粒)',
+    'MED-003': '维生素C咀嚼片 (100mg*100片)',
+    'MED-004': '复方感冒灵颗粒 (10g*9袋)',
+    'MED-005': '人工泪液滴眼液 (0.4ml*30支)',
+    'MED-006': '医用外科口罩 (独立包装/50只)'
   };
 
   const itemCodes = Object.keys(productCatalog);
@@ -143,7 +143,7 @@ const generateMockData = (): AppData => {
 
       // 2. 确定该批次的退货
       // 逻辑：以分销商的平均退货率为目标，但每个批次会有所不同
-      // *** 强制逻辑：D004 (数码港) 的第3个批次 (b===2) 必须有多次退货 ***
+      // *** 强制逻辑：D004 (康宁药店) 的第3个批次 (b===2) 必须有多次退货 ***
       const forceMultipleReturns = (supplier.id === 'D004' && b === 2);
       
       const shouldHaveReturns = forceMultipleReturns || Math.random() < (supplier.avgReturnRate * 8); 
@@ -221,7 +221,7 @@ const generateMockData = (): AppData => {
             batchId: batchId,
             batchTotalValue: batchTotalValue,
             batchTotalQty: batchTotalQty,
-            returnReason: Math.random() > 0.5 ? '质量缺陷' : '发错货', // Defective : Wrong Item
+            returnReason: Math.random() > 0.5 ? '包装破损' : '效期临近', // Damaged Packaging : Near Expiry
             riskDescription: reasons.join(' ')
           });
         }
