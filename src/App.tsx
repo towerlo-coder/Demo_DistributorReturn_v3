@@ -1,73 +1,10 @@
-import { useState, useMemo } from 'react';
-import { 
-  LayoutDashboard, 
-  Users, 
-  Check, 
-  AlertTriangle, 
-  ArrowLeft, 
-  Percent, 
-  ShoppingCart, 
-  Repeat2, 
-  TrendingUp, 
-  Grid, 
-  List, 
-  FileText
-} from 'lucide-react';
-import type { LucideIcon } from 'lucide-react';
-
-// --- 类型定义 (Type Definitions) ---
-
-interface Supplier {
-  id: string;
-  name: string;
-  avgReturnRate: number;
-}
-
-interface Transaction {
-  id: string;
-  supplierId: string;
-  type: '采购' | '退货';
-  itemCode: string;
-  quantity: number;
-  value: number;
-  date: string;
-  batchId: string;
-  batchTotalValue: number;
-  batchTotalQty: number;
-  confidenceRating?: '低' | '中' | '高';
-  approvalStatus?: '待审核' | '自动批准' | '人工已批准';
-  returnReason?: string;
-  riskDescription?: string;
-}
-
-interface AppData {
-  suppliers: Supplier[];
-  transactions: Transaction[];
-}
-
-interface MonthlyData {
-  purchaseQty: number;
-  returnQty: number;
-  total?: number;
-}
-
-interface ChartDataPoint extends MonthlyData {
-  date: string;
-  returnRate: number;
-}
-
-interface BatchData {
-  batchId: string;
-  purchaseQty: number;
-  purchaseVal: number;
-  returnQty: number;
-  returnVal: number;
-}
+import React, { useState, useMemo } from 'react';
+import { LayoutDashboard, Users, DollarSign, Check, AlertTriangle, ArrowLeft, Percent, ShoppingCart, Repeat2, TrendingUp, Grid, List, Info, FileText } from 'lucide-react';
 
 // --- 模拟数据生成器 (MOCK DATA GENERATOR) ---
-const generateMockData = (): AppData => {
+const generateMockData = () => {
   // 修改为分销商名称
-  const suppliers: Supplier[] = [
+  const suppliers = [
     { id: 'D001', name: '华东区域分销中心', avgReturnRate: 0.015 }, 
     { id: 'D002', name: '北方电子渠道商', avgReturnRate: 0.04 },
     { id: 'D003', name: '速达连锁零售', avgReturnRate: 0.07 },
@@ -75,7 +12,7 @@ const generateMockData = (): AppData => {
   ];
 
   const itemCodes = ['ITEM-A1', 'ITEM-B2', 'ITEM-C3', 'ITEM-D4', 'ITEM-E5', 'ITEM-F6'];
-  const transactions: Transaction[] = [];
+  const transactions = [];
   let transactionId = 1000;
   
   // 为了清晰起见，我们将为每个分销商生成正好 5 个主要批次
@@ -163,8 +100,8 @@ const generateMockData = (): AppData => {
 
            // AI 风险逻辑 (AI Risk Logic)
            const batchReturnRate = (currentReturnVal + val) / batchTotalValue; // 累计比率
-           let riskLevel: '低' | '中' | '高' = '低';
-           let reasons: string[] = [];
+           let riskLevel = '低'; // Low
+           let reasons = [];
 
            if (batchReturnRate > supplier.avgReturnRate * 2.5) {
              riskLevel = '高'; // High
@@ -206,23 +143,23 @@ const generateMockData = (): AppData => {
     }
   });
 
-  return { suppliers, transactions };
+  return { suppliers: suppliers.map(s => ({id: s.id, name: s.name})), transactions };
 };
 
 const initialData = generateMockData();
 
 // --- 工具函数 (Utility Functions) ---
-const formatCurrency = (value: number): string => `$${value.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
-const formatPercentage = (value: number): string => `${(value * 100).toFixed(1)}%`;
+const formatCurrency = (value) => `$${value.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+const formatPercentage = (value) => `${(value * 100).toFixed(1)}%`;
 
-const filterTransactionsByYear = (transactions: Transaction[], year: string): Transaction[] => {
+const filterTransactionsByYear = (transactions, year) => {
   if (year === '全部') return transactions; // All
   const yearStr = String(year);
   return transactions.filter(t => t.date.startsWith(yearStr));
 };
 
-const calculateMonthlyReturnRates = (transactions: Transaction[]): ChartDataPoint[] => {
-  const monthlyData = transactions.reduce<Record<string, MonthlyData>>((acc, t) => {
+const calculateMonthlyReturnRates = (transactions) => {
+  const monthlyData = transactions.reduce((acc, t) => {
     const monthYear = t.date.substring(0, 7); // YYYY-MM
     if (!acc[monthYear]) {
       acc[monthYear] = { purchaseQty: 0, returnQty: 0 };
@@ -246,14 +183,7 @@ const calculateMonthlyReturnRates = (transactions: Transaction[]): ChartDataPoin
 
 // --- 组件 (Components) ---
 
-interface StatCardProps {
-  title: string;
-  value: string | number;
-  icon: LucideIcon;
-  color: string;
-}
-
-const StatCard = ({ title, value, icon: Icon, color }: StatCardProps) => (
+const StatCard = ({ title, value, icon: Icon, color }) => (
   <div className="bg-white p-5 rounded-xl shadow-lg border border-gray-100 transition-all hover:shadow-xl">
     <div className={`flex items-center justify-between`}>
       <h3 className="text-sm font-medium text-gray-500 truncate">{title}</h3>
@@ -263,12 +193,7 @@ const StatCard = ({ title, value, icon: Icon, color }: StatCardProps) => (
   </div>
 );
 
-interface YearSelectorProps {
-  selectedYear: string;
-  onSelectYear: (year: string) => void;
-}
-
-const YearSelector = ({ selectedYear, onSelectYear }: YearSelectorProps) => {
+const YearSelector = ({ selectedYear, onSelectYear }) => {
   const years = ['全部', '2024', '2023']; // All
   return (
     <div className="flex items-center space-x-2">
@@ -290,13 +215,8 @@ const YearSelector = ({ selectedYear, onSelectYear }: YearSelectorProps) => {
   );
 };
 
-interface ReturnRateChartProps {
-  transactions: Transaction[];
-  title: string;
-}
-
 // 带平均线的折线图
-const ReturnRateOverTimeChart = ({ transactions, title }: ReturnRateChartProps) => {
+const ReturnRateOverTimeChart = ({ transactions, title }) => {
   const monthlyData = calculateMonthlyReturnRates(transactions);
   if (monthlyData.length === 0) return <div className="p-4 text-center text-gray-500">无图表数据。</div>;
 
@@ -313,7 +233,7 @@ const ReturnRateOverTimeChart = ({ transactions, title }: ReturnRateChartProps) 
   const X_OFFSET = POINT_SPACING / 2;
 
   const maxRate = Math.max(...monthlyData.map(d => d.returnRate), avgRate * 1.5, 0.1); 
-  const rateScale = (rate: number) => (rate / (maxRate * 1.1 || 1)) * CHART_HEIGHT;
+  const rateScale = (rate) => (rate / (maxRate * 1.1 || 1)) * CHART_HEIGHT;
 
   const points = monthlyData.map((d, index) => {
     const x = index * POINT_SPACING + X_OFFSET;
@@ -363,13 +283,7 @@ const ReturnRateOverTimeChart = ({ transactions, title }: ReturnRateChartProps) 
   );
 };
 
-interface SupplierListProps {
-  data: AppData;
-  onSelectSupplier: (id: string) => void;
-  filteredTransactions: Transaction[];
-}
-
-const SupplierList = ({ data, onSelectSupplier, filteredTransactions }: SupplierListProps) => {
+const SupplierList = ({ data, onSelectSupplier, filteredTransactions }) => {
   // 预先计算并排序数据
   const sortedSuppliers = useMemo(() => {
     return data.suppliers.map(supplier => {
@@ -446,14 +360,7 @@ const SupplierList = ({ data, onSelectSupplier, filteredTransactions }: Supplier
   );
 };
 
-interface DashboardViewProps {
-  data: AppData;
-  onSelectSupplier: (id: string) => void;
-  selectedYear: string;
-  onSelectYear: (year: string) => void;
-}
-
-const DashboardView = ({ data, onSelectSupplier, selectedYear, onSelectYear }: DashboardViewProps) => {
+const DashboardView = ({ data, onSelectSupplier, selectedYear, onSelectYear }) => {
   const filteredTransactions = useMemo(() => filterTransactionsByYear(data.transactions, selectedYear), [data.transactions, selectedYear]);
 
   const totalPurchaseQty = filteredTransactions.filter(t => t.type === '采购').reduce((sum, t) => sum + t.quantity, 0);
@@ -499,7 +406,7 @@ const DashboardView = ({ data, onSelectSupplier, selectedYear, onSelectYear }: D
 
 // --- 供应商详情组件 (Supplier Detail Components) ---
 
-const ConfidenceBadge = ({ rating }: { rating: string }) => {
+const ConfidenceBadge = ({ rating }) => {
   let color = 'bg-gray-200 text-gray-800';
   if (rating === '低') color = 'bg-green-100 text-green-800';
   if (rating === '中') color = 'bg-yellow-100 text-yellow-800';
@@ -511,7 +418,7 @@ const ConfidenceBadge = ({ rating }: { rating: string }) => {
   );
 };
 
-const StatusBadge = ({ status }: { status: string }) => {
+const StatusBadge = ({ status }) => {
   let color = 'bg-gray-200 text-gray-800';
   let Icon = Grid;
   if (status === '自动批准' || status === '人工已批准') {
@@ -529,12 +436,7 @@ const StatusBadge = ({ status }: { status: string }) => {
   );
 };
 
-interface TypeFilterProps {
-  selectedType: string;
-  onSelectType: (type: string) => void;
-}
-
-const TypeFilter = ({ selectedType, onSelectType }: TypeFilterProps) => {
+const TypeFilter = ({ selectedType, onSelectType }) => {
   const types = ['全部', '采购', '退货'];
   return (
     <div className="flex space-x-2">
@@ -555,12 +457,8 @@ const TypeFilter = ({ selectedType, onSelectType }: TypeFilterProps) => {
   );
 };
 
-interface TransactionLogViewProps {
-  transactions: Transaction[];
-  onApprove: (id: string) => void;
-}
 
-const TransactionLogView = ({ transactions, onApprove }: TransactionLogViewProps) => (
+const TransactionLogView = ({ transactions, onApprove }) => (
   <div className="overflow-x-auto">
     <table className="min-w-full divide-y divide-gray-200">
       <thead className="bg-gray-50">
@@ -570,7 +468,7 @@ const TransactionLogView = ({ transactions, onApprove }: TransactionLogViewProps
           <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
             数量 | 金额 <br/> <span className="text-gray-400">批次总计</span>
           </th>
-          <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/4">AI 分析</th>
+          <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/4">AI 退货风险评分</th>
           <th className="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">状态</th>
           <th className="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">操作</th>
         </tr>
@@ -612,7 +510,7 @@ const TransactionLogView = ({ transactions, onApprove }: TransactionLogViewProps
                 {isReturn ? (
                   <div className="flex flex-col items-start space-y-1">
                     <div className="flex items-center space-x-2">
-                       <ConfidenceBadge rating={t.confidenceRating || '低'} />
+                       <ConfidenceBadge rating={t.confidenceRating} />
                        <span className="text-xs text-gray-500 italic">({t.returnReason})</span>
                     </div>
                     <p className="text-xs text-gray-600 leading-snug bg-white/50 p-1 rounded border border-gray-100">
@@ -625,7 +523,7 @@ const TransactionLogView = ({ transactions, onApprove }: TransactionLogViewProps
                 )}
               </td>
               <td className="px-3 py-4 whitespace-nowrap text-center">
-                {isReturn ? <StatusBadge status={t.approvalStatus || '自动批准'} /> : <span className="text-gray-400">—</span>}
+                {isReturn ? <StatusBadge status={t.approvalStatus} /> : <span className="text-gray-400">—</span>}
               </td>
               <td className="px-3 py-4 whitespace-nowrap text-center">
                 {requiresReview ? (
@@ -647,8 +545,8 @@ const TransactionLogView = ({ transactions, onApprove }: TransactionLogViewProps
   </div>
 );
 
-const BatchPivotView = ({ transactions }: { transactions: Transaction[] }) => {
-  const batchData = transactions.reduce<Record<string, BatchData>>((acc, t) => {
+const BatchPivotView = ({ transactions }) => {
+  const batchData = transactions.reduce((acc, t) => {
     if (!acc[t.batchId]) {
       acc[t.batchId] = { batchId: t.batchId, purchaseQty: 0, purchaseVal: 0, returnQty: 0, returnVal: 0 };
     }
@@ -664,6 +562,7 @@ const BatchPivotView = ({ transactions }: { transactions: Transaction[] }) => {
 
   const pivotTableData = Object.values(batchData).map(d => ({
     ...d,
+    // Calculate Quantity-based Return %
     returnRate: d.purchaseQty > 0 ? d.returnQty / d.purchaseQty : 0
   })).sort((a, b) => b.returnRate - a.returnRate);
 
@@ -699,23 +598,16 @@ const BatchPivotView = ({ transactions }: { transactions: Transaction[] }) => {
   );
 };
 
-interface SupplierDetailViewProps {
-  supplierId: string;
-  data: AppData;
-  onGoBack: () => void;
-  onApprove: (id: string) => void;
-}
-
-const SupplierDetailView = ({ supplierId, data, onGoBack, onApprove }: SupplierDetailViewProps) => {
-  const [detailView, setDetailView] = useState<'Log' | 'Pivot'>('Log');
-  const [selectedType, setSelectedType] = useState('退货');
+const SupplierDetailView = ({ supplierId, data, onGoBack, onApprove }) => {
+  const [detailView, setDetailView] = useState('Log'); // Default to Log view
+  const [selectedType, setSelectedType] = useState('退货'); // Default to Return transactions (退货)
   
   const supplier = data.suppliers.find(s => s.id === supplierId);
   
   const filteredTransactions = useMemo(() => {
     const transactions = data.transactions
       .filter(t => t.supplierId === supplierId)
-      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      .sort((a, b) => new Date(b.date) - new Date(a.date));
 
     if (selectedType === '全部') return transactions;
     return transactions.filter(t => t.type === selectedType);
@@ -786,12 +678,12 @@ const SupplierDetailView = ({ supplierId, data, onGoBack, onApprove }: SupplierD
 
 
 const App = () => {
-  const [currentPage, setCurrentPage] = useState<'Dashboard' | 'SupplierDetail'>('Dashboard');
-  const [selectedSupplierId, setSelectedSupplierId] = useState<string | null>(null);
-  const [appData, setAppData] = useState<AppData>(initialData);
+  const [currentPage, setCurrentPage] = useState('Dashboard');
+  const [selectedSupplierId, setSelectedSupplierId] = useState(null);
+  const [appData, setAppData] = useState(initialData);
   const [selectedYear, setSelectedYear] = useState('全部');
 
-  const handleSelectSupplier = (id: string) => {
+  const handleSelectSupplier = (id) => {
     setSelectedSupplierId(id);
     setCurrentPage('SupplierDetail');
   };
@@ -801,10 +693,10 @@ const App = () => {
     setSelectedSupplierId(null);
   };
 
-  const handleApproveTransaction = (transactionId: string) => {
+  const handleApproveTransaction = (transactionId) => {
     const newTransactions = appData.transactions.map(t => {
       if (t.id === transactionId && t.approvalStatus === '待审核') {
-        return { ...t, approvalStatus: '人工已批准' as const };
+        return { ...t, approvalStatus: '人工已批准' };
       }
       return t;
     });
