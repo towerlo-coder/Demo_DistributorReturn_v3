@@ -605,7 +605,7 @@ const DashboardView = ({ data, onSelectSupplier, selectedYear, onSelectYear }: D
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-3xl font-bold text-gray-900 flex items-center">
           <LayoutDashboard className="w-8 h-8 mr-3 text-indigo-600" />
-          AI 退货审批平台
+          AI 退货审批仪表盘
         </h1>
         <YearSelector selectedYear={selectedYear} onSelectYear={onSelectYear} />
       </div>
@@ -925,19 +925,19 @@ const SupplierDetailView = ({ supplierId, data, onGoBack, onApprove }: SupplierD
   
   const supplier = data.suppliers.find(s => s.id === supplierId);
   
-  const filteredTransactions = useMemo(() => {
-    const transactions = data.transactions
+  const allSupplierTransactions = useMemo(() => {
+     return data.transactions
       .filter(t => t.supplierId === supplierId)
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  }, [data.transactions, supplierId]);
 
-    if (selectedType === '全部') return transactions;
-    return transactions.filter(t => t.type === selectedType);
-  }, [data.transactions, supplierId, selectedType]);
+  const filteredTransactions = useMemo(() => {
+    if (selectedType === '全部') return allSupplierTransactions;
+    return allSupplierTransactions.filter(t => t.type === selectedType);
+  }, [allSupplierTransactions, selectedType]);
 
 
   if (!supplier) return <p className="p-8 text-red-500">未找到分销商。</p>;
-
-  const allSupplierTransactions = data.transactions.filter(t => t.supplierId === supplierId);
 
   return (
     <div className="p-8">
@@ -999,10 +999,10 @@ const SupplierDetailView = ({ supplierId, data, onGoBack, onApprove }: SupplierD
           <TransactionLogView transactions={filteredTransactions} onApprove={onApprove} />
         )}
         {detailView === 'Batch' && (
-          <BatchPivotView transactions={filteredTransactions} />
+          <BatchPivotView transactions={allSupplierTransactions} />
         )}
         {detailView === 'Product' && (
-          <ProductPivotView transactions={filteredTransactions} />
+          <ProductPivotView transactions={allSupplierTransactions} />
         )}
       </div>
     </div>
@@ -1064,7 +1064,7 @@ const App = () => {
         </div>
       </div>
       <footer className="py-4 text-center text-gray-500 text-sm">
-        AI 演示案例 | AI 退货审批平台
+        AI 演示案例 | 信用评级审批工作流
       </footer>
     </div>
   );
