@@ -11,7 +11,8 @@ import {
   TrendingUp, 
   Grid, 
   List, 
-  FileText
+  FileText,
+  Package
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
@@ -28,6 +29,7 @@ interface Transaction {
   supplierId: string;
   type: '采购' | '退货';
   itemCode: string;
+  productName: string;
   quantity: number;
   value: number;
   date: string;
@@ -63,6 +65,13 @@ interface BatchData {
   returnVal: number;
 }
 
+interface ProductReturnData {
+  itemCode: string;
+  productName: string;
+  returnQty: number;
+  returnRate: number;
+}
+
 // --- 模拟数据生成器 (MOCK DATA GENERATOR) ---
 const generateMockData = (): AppData => {
   // 修改为分销商名称
@@ -73,7 +82,16 @@ const generateMockData = (): AppData => {
     { id: 'D004', name: '数码港特许经营店', avgReturnRate: 0.095 },
   ];
 
-  const itemCodes = ['ITEM-A1', 'ITEM-B2', 'ITEM-C3', 'ITEM-D4', 'ITEM-E5', 'ITEM-F6'];
+  const productCatalog: Record<string, string> = {
+    'ITEM-A1': '高速 HDMI 线缆',
+    'ITEM-B2': '无线蓝牙耳机',
+    'ITEM-C3': 'USB-C 充电适配器',
+    'ITEM-D4': '智能手表表带',
+    'ITEM-E5': '机械键盘轴体',
+    'ITEM-F6': '高清网络摄像头'
+  };
+
+  const itemCodes = Object.keys(productCatalog);
   const transactions: Transaction[] = [];
   let transactionId = 1000;
   
@@ -100,11 +118,14 @@ const generateMockData = (): AppData => {
         batchTotalValue += val;
         batchTotalQty += qty;
 
+        const itemCode = itemCodes[Math.floor(Math.random() * itemCodes.length)];
+
         transactions.push({
           id: `T${transactionId++}`,
           supplierId: supplier.id,
           type: '采购', // Purchase
-          itemCode: itemCodes[Math.floor(Math.random() * itemCodes.length)],
+          itemCode: itemCode,
+          productName: productCatalog[itemCode],
           quantity: qty,
           value: val,
           date: batchDate,
@@ -184,11 +205,14 @@ const generateMockData = (): AppData => {
            const returnDate = new Date(batchDate);
            returnDate.setDate(returnDate.getDate() + Math.floor(Math.random() * 20) + 5);
 
+           const itemCode = itemCodes[Math.floor(Math.random() * itemCodes.length)];
+
            transactions.push({
             id: `R${transactionId++}`,
             supplierId: supplier.id,
             type: '退货', // Return
-            itemCode: itemCodes[Math.floor(Math.random() * itemCodes.length)],
+            itemCode: itemCode,
+            productName: productCatalog[itemCode],
             quantity: qty,
             value: val,
             date: returnDate.toISOString().split('T')[0],
@@ -241,6 +265,28 @@ const calculateMonthlyReturnRates = (transactions: Transaction[]): ChartDataPoin
       ...monthlyData[key],
       returnRate: monthlyData[key].purchaseQty > 0 ? monthlyData[key].returnQty / monthlyData[key].purchaseQty : 0
     }));
+};
+
+const calculateTopReturnedProducts = (transactions: Transaction[]): ProductReturnData[] => {
+  const productStats = transactions.reduce<Record<string, { qty: number, name: string }>>((acc, t) => {
+    if (t.type === '退货') {
+      if (!acc[t.itemCode]) {
+        acc[t.itemCode] = { qty: 0, name: t.productName };
+      }
+      acc[t.itemCode].qty += t.quantity;
+    }
+    return acc;
+  }, {});
+
+  return Object.keys(productStats)
+    .map(code => ({
+      itemCode: code,
+      productName: productStats[code].name,
+      returnQty: productStats[code].qty,
+      returnRate: 0 // Placeholder as calculation across mixed batches is complex for demo
+    }))
+    .sort((a, b) => b.returnQty - a.returnQty)
+    .slice(0, 5);
 };
 
 // --- 组件 (Components) ---
@@ -323,7 +369,7 @@ const ReturnRateOverTimeChart = ({ transactions, title }: ReturnRateChartProps) 
   const avgLineY = CHART_HEIGHT - rateScale(avgRate);
 
   return (
-    <div className="bg-white p-6 rounded-xl shadow-lg border border-gray-100">
+    <div className="bg-white p-6 rounded-xl shadow-lg border border-gray-100 h-full">
       <h2 className="text-xl font-semibold text-gray-800 mb-4 flex items-center justify-between">
         <span className="flex items-center"><TrendingUp className="w-5 h-5 mr-2 text-indigo-500" /> {title}</span>
         <span className="text-sm font-normal text-gray-500">平均退货率 (数量): <span className="font-bold text-gray-800">{formatPercentage(avgRate)}</span></span>
@@ -357,6 +403,43 @@ const ReturnRateOverTimeChart = ({ transactions, title }: ReturnRateChartProps) 
             );
           })}
         </svg>
+      </div>
+    </div>
+  );
+};
+
+interface TopProductsProps {
+  transactions: Transaction[];
+}
+
+const TopProductsChart = ({ transactions }: TopProductsProps) => {
+  const topProducts = calculateTopReturnedProducts(transactions);
+  
+  if (topProducts.length === 0) return <div className="p-4 text-center text-gray-500">无产品数据</div>;
+
+  const maxQty = Math.max(...topProducts.map(p => p.returnQty));
+
+  return (
+    <div className="bg-white p-6 rounded-xl shadow-lg border border-gray-100 h-full">
+      <h2 className="text-xl font-semibold text-gray-800 mb-4 flex items-center">
+        <Package className="w-5 h-5 mr-2 text-indigo-500" /> 
+        热门退货产品 (Top 5)
+      </h2>
+      <div className="space-y-4">
+        {topProducts.map((p, i) => (
+          <div key={p.itemCode}>
+            <div className="flex justify-between text-sm mb-1">
+              <span className="font-medium text-gray-700">{i + 1}. {p.productName} <span className="text-xs text-gray-400">({p.itemCode})</span></span>
+              <span className="font-bold text-red-600">{p.returnQty} 件</span>
+            </div>
+            <div className="w-full bg-gray-100 rounded-full h-2.5">
+              <div 
+                className="bg-indigo-500 h-2.5 rounded-full" 
+                style={{ width: `${(p.returnQty / maxQty) * 100}%` }}
+              ></div>
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -480,11 +563,16 @@ const DashboardView = ({ data, onSelectSupplier, selectedYear, onSelectYear }: D
         <StatCard title="待人工审批" value={totalPending} icon={AlertTriangle} color="text-orange-500" />
       </div>
 
-      <div className="mb-8">
-        <ReturnRateOverTimeChart
-          transactions={data.transactions}
-          title="整体退货率趋势 (按产品数量)"
-        />
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
+        <div className="lg:col-span-2">
+          <ReturnRateOverTimeChart
+            transactions={data.transactions}
+            title="整体退货率趋势 (按产品数量)"
+          />
+        </div>
+        <div className="lg:col-span-1">
+          <TopProductsChart transactions={filteredTransactions} />
+        </div>
       </div>
 
       <SupplierList
@@ -566,6 +654,7 @@ const TransactionLogView = ({ transactions, onApprove }: TransactionLogViewProps
         <tr>
           <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID / 批次</th>
           <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">日期 / 类型</th>
+          <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">产品 (SKU)</th>
           <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
             数量 | 金额 <br/> <span className="text-gray-400">批次总计</span>
           </th>
@@ -588,6 +677,10 @@ const TransactionLogView = ({ transactions, onApprove }: TransactionLogViewProps
                 <span className="text-gray-500">{t.date}</span>
                 <br />
                 <span className={`text-xs font-semibold ${isReturn ? 'text-red-700' : 'text-blue-700'}`}>{t.type}</span>
+              </td>
+              <td className="px-3 py-4 text-sm text-gray-700">
+                <div className="font-medium">{t.productName}</div>
+                <div className="text-xs text-gray-500">{t.itemCode}</div>
               </td>
               <td className="px-3 py-4 whitespace-nowrap text-sm text-right font-mono">
                 <div>
