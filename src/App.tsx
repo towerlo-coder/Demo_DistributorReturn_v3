@@ -12,7 +12,8 @@ import {
   Grid, 
   List, 
   FileText,
-  Package
+  Package,
+  Layers
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
@@ -59,6 +60,15 @@ interface ChartDataPoint extends MonthlyData {
 
 interface BatchData {
   batchId: string;
+  purchaseQty: number;
+  purchaseVal: number;
+  returnQty: number;
+  returnVal: number;
+}
+
+interface ProductPivotData {
+  itemCode: string;
+  productName: string;
   purchaseQty: number;
   purchaseVal: number;
   returnQty: number;
@@ -840,6 +850,68 @@ const BatchPivotView = ({ transactions }: { transactions: Transaction[] }) => {
   );
 };
 
+const ProductPivotView = ({ transactions }: { transactions: Transaction[] }) => {
+  const productData = transactions.reduce<Record<string, ProductPivotData>>((acc, t) => {
+    if (!acc[t.itemCode]) {
+      acc[t.itemCode] = { 
+        itemCode: t.itemCode, 
+        productName: t.productName,
+        purchaseQty: 0, 
+        purchaseVal: 0, 
+        returnQty: 0, 
+        returnVal: 0 
+      };
+    }
+    if (t.type === '采购') {
+      acc[t.itemCode].purchaseQty += t.quantity;
+      acc[t.itemCode].purchaseVal += t.value;
+    } else if (t.type === '退货') {
+      acc[t.itemCode].returnQty += t.quantity;
+      acc[t.itemCode].returnVal += t.value;
+    }
+    return acc;
+  }, {});
+
+  const pivotTableData = Object.values(productData).map((d) => ({
+    ...d,
+    returnRate: d.purchaseQty > 0 ? d.returnQty / d.purchaseQty : 0
+  })).sort((a, b) => b.returnRate - a.returnRate);
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="min-w-full divide-y divide-gray-200">
+        <thead className="bg-gray-50">
+          <tr>
+            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">产品 (SKU)</th>
+            <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">采购 <br/> (数量 | 金额)</th>
+            <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">退货 <br/> (数量 | 金额)</th>
+            <th className="px-6 py-3 text-right text-xs font-medium text-red-600 uppercase tracking-wider">退货率 (数量)</th>
+          </tr>
+        </thead>
+        <tbody className="bg-white divide-y divide-gray-200">
+          {pivotTableData.map((d) => (
+            <tr key={d.itemCode} className={`hover:bg-gray-50 transition duration-150 ${d.returnRate > 0.09 ? 'bg-red-50' : ''}`}>
+              <td className="px-6 py-4 text-sm font-medium text-gray-900">
+                <div>{d.productName}</div>
+                <div className="text-xs text-gray-500">{d.itemCode}</div>
+              </td>
+              <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-500">
+                 <span className="font-semibold text-gray-700">{d.purchaseQty}</span> <span className="text-gray-400 mx-1">|</span> {formatCurrency(d.purchaseVal)}
+              </td>
+              <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-500">
+                 <span className="font-semibold text-gray-700">{d.returnQty}</span> <span className="text-gray-400 mx-1">|</span> {formatCurrency(d.returnVal)}
+              </td>
+              <td className={`px-6 py-4 whitespace-nowrap text-sm text-right font-bold ${d.returnRate > 0.09 ? 'text-red-500' : 'text-gray-700'}`}>
+                {formatPercentage(d.returnRate)}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+};
+
 interface SupplierDetailViewProps {
   supplierId: string;
   data: AppData;
@@ -848,7 +920,7 @@ interface SupplierDetailViewProps {
 }
 
 const SupplierDetailView = ({ supplierId, data, onGoBack, onApprove }: SupplierDetailViewProps) => {
-  const [detailView, setDetailView] = useState<'Log' | 'Pivot'>('Log');
+  const [detailView, setDetailView] = useState<'Log' | 'Batch' | 'Product'>('Log');
   const [selectedType, setSelectedType] = useState('退货');
   
   const supplier = data.suppliers.find(s => s.id === supplierId);
@@ -904,21 +976,33 @@ const SupplierDetailView = ({ supplierId, data, onGoBack, onApprove }: SupplierD
                 <List className="w-4 h-4 mr-1" /> 日志视图
               </button>
               <button
-                onClick={() => setDetailView('Pivot')}
+                onClick={() => setDetailView('Batch')}
                 className={`px-3 py-1 text-sm font-medium rounded-lg flex items-center transition-colors ${
-                  detailView === 'Pivot' ? 'bg-indigo-600 text-white shadow-md' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  detailView === 'Batch' ? 'bg-indigo-600 text-white shadow-md' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                 }`}
               >
                 <Grid className="w-4 h-4 mr-1" /> 批次透视
+              </button>
+              <button
+                onClick={() => setDetailView('Product')}
+                className={`px-3 py-1 text-sm font-medium rounded-lg flex items-center transition-colors ${
+                  detailView === 'Product' ? 'bg-indigo-600 text-white shadow-md' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                <Layers className="w-4 h-4 mr-1" /> 产品透视
               </button>
             </div>
           </div>
         </div>
 
-        {detailView === 'Log' ? (
+        {detailView === 'Log' && (
           <TransactionLogView transactions={filteredTransactions} onApprove={onApprove} />
-        ) : (
+        )}
+        {detailView === 'Batch' && (
           <BatchPivotView transactions={filteredTransactions} />
+        )}
+        {detailView === 'Product' && (
+          <ProductPivotView transactions={filteredTransactions} />
         )}
       </div>
     </div>
