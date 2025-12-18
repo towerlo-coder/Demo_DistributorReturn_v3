@@ -605,7 +605,7 @@ const DashboardView = ({ data, onSelectSupplier, selectedYear, onSelectYear }: D
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-3xl font-bold text-gray-900 flex items-center">
           <LayoutDashboard className="w-8 h-8 mr-3 text-indigo-600" />
-          AI 退货审批仪表盘
+          AI 退货审批平台
         </h1>
         <YearSelector selectedYear={selectedYear} onSelectYear={onSelectYear} />
       </div>
@@ -1064,7 +1064,7 @@ const App = () => {
         </div>
       </div>
       <footer className="py-4 text-center text-gray-500 text-sm">
-        AI 演示案例 | 信用评级审批工作流
+        AI 演示案例 | AI 退货审批平台
       </footer>
     </div>
   );
