@@ -19,7 +19,9 @@ import {
   Send,
   Lightbulb,
   XCircle,
-  HelpCircle
+  HelpCircle,
+  PieChart,
+  FileSearch
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
@@ -82,6 +84,13 @@ interface ProductPivotData {
   returnVal: number;
 }
 
+interface ReasonPivotData {
+  reason: string;
+  count: number;
+  totalQty: number;
+  totalVal: number;
+}
+
 interface ProductReturnData {
   itemCode: string;
   productName: string;
@@ -105,6 +114,41 @@ const generateMockData = (): AppData => {
     'MED-004': '复方感冒灵颗粒 (10g*9袋)',
     'MED-005': '人工泪液滴眼液 (0.4ml*30支)',
     'MED-006': '医用外科口罩 (独立包装/50只)'
+  };
+
+  const returnReasonsList = [
+    '产品效期退货',
+    '特殊原因退货',
+    '确认的产品投诉退货',
+    '运输异常退货',
+    '进境/原箱外观异常退货',
+    '系统已过账实物未出场退货',
+    '未送达订单退货',
+    '产品召回退货'
+  ];
+
+  // 医药相关的具体 AI 风险描述库
+  const pharmaRiskReasons = {
+    high: [
+      '该批次退货率异常偏高 (25%+)，远超行业平均水平。',
+      '短时间内多次小额退货，符合拆单退货 (Structuring) 特征。',
+      '电子监管码/序列号扫描未通过，疑似串货或非正规渠道商品。',
+      '涉及特殊管制药品，且未提供完整的合规证明文件。',
+      '退货原因与历史采购记录及库存周转情况严重不符。'
+    ],
+    medium: [
+      '退货数量接近该批次历史采购总量的 10%，建议人工核实。',
+      '非首次申请同一批次退货，需检查是否重复提交。',
+      '冷链药品退货，需确认物流过程中的温度监控记录。',
+      '距离药品效期不足 6 个月，需确认是否符合特定的促销退货政策。',
+      '该分销商近期退货频率略有上升，超出其历史基准线。'
+    ],
+    low: [
+      '符合常规退货流程，批次号与采购记录匹配。',
+      '该分销商信用评级为 A，历史退货行为规范。',
+      '系统自动核验通过：在保质期退货窗口内。',
+      '小额破损退货，金额低于自动审批阈值。'
+    ]
   };
 
   const itemCodes = Object.keys(productCatalog);
@@ -187,25 +231,41 @@ const generateMockData = (): AppData => {
            let riskLevel: '低' | '中' | '高' = '低';
            let reasons: string[] = [];
 
+           // 风险等级判定逻辑
            if (batchReturnRate > supplier.avgReturnRate * 2.5) {
              riskLevel = '高';
-             reasons.push('批次退货率显著高于平均水平。');
            } else if (batchReturnRate > supplier.avgReturnRate * 1.5) {
              riskLevel = '中';
-             reasons.push('批次退货率略微偏高。');
            }
-
            if (r >= 1) {
              riskLevel = '中';
-             reasons.push('单批次内存在多笔退货交易。');
            }
+           if (forceMultipleReturns) riskLevel = '中'; // 强制设置为中风险以演示
 
-           if (reasons.length === 0) reasons.push('在可接受范围内。');
+           // 从医药风险库中随机选择原因
+           if (riskLevel === '高') {
+             reasons.push(pharmaRiskReasons.high[Math.floor(Math.random() * pharmaRiskReasons.high.length)]);
+           } else if (riskLevel === '中') {
+             reasons.push(pharmaRiskReasons.medium[Math.floor(Math.random() * pharmaRiskReasons.medium.length)]);
+             if (forceMultipleReturns) reasons = ["单批次内存在多笔退货交易，疑似拆单操作。"];
+           } else {
+             reasons.push(pharmaRiskReasons.low[Math.floor(Math.random() * pharmaRiskReasons.low.length)]);
+           }
 
            const returnDate = new Date(batchDate);
            returnDate.setDate(returnDate.getDate() + Math.floor(Math.random() * 20) + 5);
 
            const itemCode = itemCodes[Math.floor(Math.random() * itemCodes.length)];
+           
+           const rand = Math.random();
+           let assignedReason = '';
+           if (rand < 0.9) {
+             const index = Math.floor(Math.random() * 2);
+             assignedReason = returnReasonsList[index];
+           } else {
+             const index = 2 + Math.floor(Math.random() * (returnReasonsList.length - 2));
+             assignedReason = returnReasonsList[index];
+           }
 
            transactions.push({
             id: `R${transactionId++}`,
@@ -221,7 +281,7 @@ const generateMockData = (): AppData => {
             batchId: batchId,
             batchTotalValue: batchTotalValue,
             batchTotalQty: batchTotalQty,
-            returnReason: Math.random() > 0.5 ? '包装破损' : '效期临近',
+            returnReason: assignedReason,
             riskDescription: reasons.join(' ')
           });
         }
@@ -298,13 +358,11 @@ interface SmartInsightsProps {
 const SmartInsights = ({ transactions, supplierName, productName }: SmartInsightsProps) => {
   const insights: { id: number; text: string; type: 'info' | 'warning' | 'alert' | 'success' }[] = [];
 
-  // 计算当前上下文的退货率
   const totalPurchase = transactions.filter(t => t.type === '采购').reduce((sum, t) => sum + t.quantity, 0);
   const totalReturn = transactions.filter(t => t.type === '退货').reduce((sum, t) => sum + t.quantity, 0);
   const rate = totalPurchase > 0 ? totalReturn / totalPurchase : 0;
 
   if (supplierName) {
-    // 分销商视图逻辑
     if (supplierName.includes('康宁') || rate > 0.08) {
       insights.push({
         id: 1,
@@ -324,7 +382,7 @@ const SmartInsights = ({ transactions, supplierName, productName }: SmartInsight
       });
       insights.push({
         id: 2,
-        text: "退货原因主要集中在正常的物流破损，无系统性风险。",
+        text: "退货原因主要集中在正常的运输异常退货，无系统性风险。",
         type: 'info'
       });
     } else {
@@ -335,10 +393,9 @@ const SmartInsights = ({ transactions, supplierName, productName }: SmartInsight
       });
     }
   } else if (productName) {
-    // 产品视图逻辑
     insights.push({
       id: 1,
-      text: `检测到 ${productName} 在 Q3 的退货主要原因为“效期临近”，建议优化该产品的库存周转策略。`,
+      text: `检测到 ${productName} 在 Q3 的退货主要原因为“产品效期退货”，建议优化该产品的库存周转策略。`,
       type: 'info'
     });
     if (rate > 0.05) {
@@ -349,7 +406,6 @@ const SmartInsights = ({ transactions, supplierName, productName }: SmartInsight
       });
     }
   } else {
-    // 仪表盘总览逻辑
     insights.push({
       id: 1,
       text: "整体退货率趋势平稳。‘康宁特许经营药店’贡献了本季度 40% 的退货量，是主要风险来源。",
@@ -463,7 +519,6 @@ const AIChatbot = () => {
           </div>
 
           <div className="p-3 bg-white border-t border-gray-100">
-            {/* Common Questions Chips */}
             <div className="flex flex-wrap gap-2 mb-3 overflow-x-auto pb-1">
               {commonQuestions.map((q, i) => (
                 <button 
@@ -558,15 +613,19 @@ interface ReturnRateChartProps {
   title: string;
   supplierName?: string;
   productName?: string;
+  targetRate?: number; // Added targetRate prop
 }
 
-const ReturnRateOverTimeChart = ({ transactions, title, supplierName, productName }: ReturnRateChartProps) => {
+const ReturnRateOverTimeChart = ({ transactions, title, supplierName, productName, targetRate }: ReturnRateChartProps) => {
   const monthlyData = calculateMonthlyReturnRates(transactions);
   if (monthlyData.length === 0) return <div className="p-4 text-center text-gray-500">无图表数据。</div>;
 
   const totalPurchaseQty = transactions.filter(t => t.type === '采购').reduce((sum, t) => sum + t.quantity, 0);
   const totalReturnQty = transactions.filter(t => t.type === '退货').reduce((sum, t) => sum + t.quantity, 0);
-  const avgRate = totalPurchaseQty > 0 ? totalReturnQty / totalPurchaseQty : 0;
+  
+  // If targetRate is provided (from mock data), use it for the dashed line average.
+  // Otherwise calculate actual average.
+  const avgRate = targetRate !== undefined ? targetRate : (totalPurchaseQty > 0 ? totalReturnQty / totalPurchaseQty : 0);
 
   const POINT_SPACING = 60;
   const SVG_WIDTH = Math.max(monthlyData.length * POINT_SPACING, 600);
@@ -952,9 +1011,44 @@ const RejectModal = ({ isOpen, onClose, onConfirm }: { isOpen: boolean, onClose:
   );
 };
 
+// 文档查看弹窗组件
+const DocumentModal = ({ isOpen, onClose }: { isOpen: boolean, onClose: () => void }) => {
+  const documents = [
+    '退货需求审批表',
+    '退货需求情况说明',
+    '退货申请表',
+    '致歉信'
+  ];
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-xl p-6 w-96 shadow-2xl">
+        <div className="flex justify-between items-center mb-4">
+          <h3 className="text-lg font-bold text-gray-900">检阅退货文档</h3>
+          <button onClick={onClose}><X className="w-5 h-5 text-gray-500 hover:text-gray-700" /></button>
+        </div>
+        <div className="space-y-3">
+          {documents.map((doc, idx) => (
+            <div key={idx} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-indigo-50 cursor-pointer transition">
+              <div className="flex items-center text-sm font-medium text-gray-700">
+                <FileText className="w-4 h-4 mr-2 text-indigo-500" />
+                {doc}
+              </div>
+              <span className="text-xs text-indigo-600 hover:underline">查看</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const TransactionLogView = ({ transactions, onApprove, onReject }: TransactionLogViewProps) => {
   const [rejectModalOpen, setRejectModalOpen] = useState(false);
   const [targetTransactionId, setTargetTransactionId] = useState<string | null>(null);
+  const [documentModalOpen, setDocumentModalOpen] = useState(false);
 
   const handleRejectClick = (id: string) => {
     setTargetTransactionId(id);
@@ -969,12 +1063,20 @@ const TransactionLogView = ({ transactions, onApprove, onReject }: TransactionLo
     setTargetTransactionId(null);
   };
 
+  const openDocumentModal = () => {
+    setDocumentModalOpen(true);
+  };
+
   return (
     <div className="overflow-x-auto">
       <RejectModal 
         isOpen={rejectModalOpen} 
         onClose={() => setRejectModalOpen(false)} 
         onConfirm={confirmReject} 
+      />
+      <DocumentModal 
+        isOpen={documentModalOpen}
+        onClose={() => setDocumentModalOpen(false)}
       />
       <table className="min-w-full divide-y divide-gray-200">
         <thead className="bg-gray-50">
@@ -985,7 +1087,9 @@ const TransactionLogView = ({ transactions, onApprove, onReject }: TransactionLo
             <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
               数量 | 金额 <br/> <span className="text-gray-400">批次总计</span>
             </th>
-            <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/4">AI 退货风险评分</th>
+            <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">退货原因</th>
+            <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/5">AI 退货风险评分</th>
+            <th className="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">检阅退货文档</th>
             <th className="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">状态</th>
             <th className="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">操作</th>
           </tr>
@@ -1026,13 +1130,15 @@ const TransactionLogView = ({ transactions, onApprove, onReject }: TransactionLo
                      )}
                   </div>
                 </td>
+                <td className="px-3 py-4 text-sm text-gray-700">
+                  {isReturn ? t.returnReason : '-'}
+                </td>
 
                 <td className="px-3 py-4 text-sm text-gray-700">
                   {isReturn ? (
                     <div className="flex flex-col items-start space-y-1">
                       <div className="flex items-center space-x-2">
                          <ConfidenceBadge rating={t.confidenceRating || '低'} />
-                         <span className="text-xs text-gray-500 italic">({t.returnReason})</span>
                       </div>
                       <p className="text-xs text-gray-600 leading-snug bg-white/50 p-1 rounded border border-gray-100">
                         <FileText className="w-3 h-3 inline mr-1 text-indigo-400" />
@@ -1047,6 +1153,19 @@ const TransactionLogView = ({ transactions, onApprove, onReject }: TransactionLo
                     </div>
                   ) : (
                     <span className="text-gray-400 text-xs italic">标准采购</span>
+                  )}
+                </td>
+                <td className="px-3 py-4 whitespace-nowrap text-center">
+                  {isReturn ? (
+                    <button 
+                      onClick={openDocumentModal}
+                      className="text-indigo-600 hover:text-indigo-800 p-1 rounded hover:bg-indigo-50 transition"
+                      title="检阅文档"
+                    >
+                      <FileSearch className="w-5 h-5 mx-auto" />
+                    </button>
+                  ) : (
+                    <span className="text-gray-400">-</span>
                   )}
                 </td>
                 <td className="px-3 py-4 whitespace-nowrap text-center">
@@ -1195,6 +1314,61 @@ const ProductPivotView = ({ transactions }: { transactions: Transaction[] }) => 
   );
 };
 
+const ReasonPivotView = ({ transactions }: { transactions: Transaction[] }) => {
+  const returnTransactions = transactions.filter(t => t.type === '退货');
+  const totalReturnQty = returnTransactions.reduce((sum, t) => sum + t.quantity, 0);
+
+  const reasonData = returnTransactions.reduce<Record<string, ReasonPivotData>>((acc, t) => {
+    const reason = t.returnReason || '未知原因';
+    if (!acc[reason]) {
+      acc[reason] = { 
+        reason: reason, 
+        count: 0,
+        totalQty: 0,
+        totalVal: 0
+      };
+    }
+    acc[reason].count += 1;
+    acc[reason].totalQty += t.quantity;
+    acc[reason].totalVal += t.value;
+    return acc;
+  }, {});
+
+  const pivotTableData = Object.values(reasonData).sort((a, b) => b.totalQty - a.totalQty);
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="min-w-full divide-y divide-gray-200">
+        <thead className="bg-gray-50">
+          <tr>
+            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">退货原因</th>
+            <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">退货次数</th>
+            <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">退货总量</th>
+            <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">退货总额</th>
+            <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">占比 (数量)</th>
+          </tr>
+        </thead>
+        <tbody className="bg-white divide-y divide-gray-200">
+          {pivotTableData.map((d) => {
+            const percentage = totalReturnQty > 0 ? d.totalQty / totalReturnQty : 0;
+            return (
+              <tr key={d.reason} className="hover:bg-gray-50 transition duration-150">
+                <td className="px-6 py-4 text-sm font-medium text-gray-900">{d.reason}</td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-500">{d.count}</td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-500">{d.totalQty}</td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-500">{formatCurrency(d.totalVal)}</td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-700 font-semibold">
+                  {formatPercentage(percentage)}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+};
+
 interface SupplierDetailViewProps {
   supplierId: string;
   data: AppData;
@@ -1204,7 +1378,7 @@ interface SupplierDetailViewProps {
 }
 
 const SupplierDetailView = ({ supplierId, data, onGoBack, onApprove, onReject }: SupplierDetailViewProps) => {
-  const [detailView, setDetailView] = useState<'Log' | 'Batch' | 'Product'>('Log');
+  const [detailView, setDetailView] = useState<'Log' | 'Batch' | 'Product' | 'Reason'>('Log');
   const [selectedType, setSelectedType] = useState('退货');
   
   const supplier = data.suppliers.find(s => s.id === supplierId);
@@ -1242,14 +1416,15 @@ const SupplierDetailView = ({ supplierId, data, onGoBack, onApprove, onReject }:
             transactions={allSupplierTransactions}
             title={`${supplier.name} 退货率趋势 (按数量)`}
             supplierName={supplier.name}
+            targetRate={supplier.avgReturnRate}
           />
         </div>
       </div>
 
       <div className="bg-white rounded-xl shadow-lg p-6">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 border-b pb-4 space-y-3 sm:space-y-0">
-          <h2 className="text-xl font-semibold text-gray-800">交易数据</h2>
-          <div className="flex space-x-4 items-center">
+          <h2 className="text-xl font-semibold text-gray-800">交易数据清單</h2>
+          <div className="flex space-x-2 items-center flex-wrap gap-y-2">
             {detailView === 'Log' && <TypeFilter selectedType={selectedType} onSelectType={setSelectedType} />}
             <div className="flex space-x-2 border-l pl-4">
               <button
@@ -1276,6 +1451,14 @@ const SupplierDetailView = ({ supplierId, data, onGoBack, onApprove, onReject }:
               >
                 <Layers className="w-4 h-4 mr-1" /> 产品透视
               </button>
+              <button
+                onClick={() => setDetailView('Reason')}
+                className={`px-3 py-1 text-sm font-medium rounded-lg flex items-center transition-colors ${
+                  detailView === 'Reason' ? 'bg-indigo-600 text-white shadow-md' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                <PieChart className="w-4 h-4 mr-1" /> 原因透视
+              </button>
             </div>
           </div>
         </div>
@@ -1288,6 +1471,9 @@ const SupplierDetailView = ({ supplierId, data, onGoBack, onApprove, onReject }:
         )}
         {detailView === 'Product' && (
           <ProductPivotView transactions={allSupplierTransactions} />
+        )}
+        {detailView === 'Reason' && (
+          <ReasonPivotView transactions={allSupplierTransactions} />
         )}
       </div>
     </div>
@@ -1341,7 +1527,7 @@ const App = () => {
 
   return (
     <div className="min-h-screen bg-gray-100 font-sans antialiased relative">
-      <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8 pb-24">
+      <div className="max-w-[95%] mx-auto py-6 sm:px-6 lg:px-8 pb-24">
         <div className="bg-white rounded-2xl shadow-2xl min-h-[80vh]">
           {currentPage === 'Dashboard' && (
             <DashboardView
